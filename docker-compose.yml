@@ -1,0 +1,18 @@
+services:
+  amneziawg-go:
+    image: fviolence/amneziawg-go:latest
+    container_name: amneziawg-go
+    privileged: true
+    network_mode: host
+    environment:
+      - AMNEZIAWG_IP=${AMNEZIAWG_IP:-10.9.9.1/24}
+      - AMNEZIAWG_PORT=${AMNEZIAWG_PORT:-49666}
+      - AMNEZIAWG_INTERFACE=${AMNEZIAWG_INTERFACE:-awg0}
+    volumes:
+      - ./amnezia-config:/etc/amnezia/amneziawg
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    restart: unless-stopped
