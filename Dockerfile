@@ -1,62 +1,52 @@
-# Use Ubuntu as the base image
-FROM ubuntu:24.04
-ARG TARGETARCH
+# syntax=docker/dockerfile:1.7
 
-# Verify TARGETARCH
-RUN echo "Building for TARGETARCH=${TARGETARCH}"
+FROM golang:1.25.8-alpine3.23 AS builder
 
-# Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
+RUN apk add --no-cache \
+        bash \
+        build-base \
+        ca-certificates \
+        git \
+        linux-headers \
+        libmnl-dev \
+        pkgconf
 
-# Install dependencies
-RUN apt-get update && \
-    apt-get install -y \
-        build-essential \
-        wireguard-tools \
+WORKDIR /src
+
+RUN git clone --depth 1 https://github.com/amnezia-vpn/amneziawg-go.git && \
+    git clone --depth 1 https://github.com/amnezia-vpn/amneziawg-tools.git
+
+RUN cd /src/amneziawg-go && \
+    make -j"$(nproc)" && \
+    mkdir -p /out/usr/local/bin && \
+    cp amneziawg-go /out/usr/local/bin/amneziawg-go && \
+    chmod +x /out/usr/local/bin/amneziawg-go
+
+RUN cd /src/amneziawg-tools/src && \
+    make -j"$(nproc)" && \
+    install -Dm755 wg /out/usr/bin/awg && \
+    install -Dm755 wg-quick/linux.bash /out/usr/bin/awg-quick
+
+FROM alpine:3.23.3
+
+RUN apk add --no-cache \
+        bash \
+        ca-certificates \
         iproute2 \
         iptables \
-        curl \
-        wget \
+        libmnl \
         python3 \
-        python3-pip \
-        python3-qrcode \
-        git \
-        software-properties-common && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+        py3-qrcode \
+        py3-pillow
 
-# Install Golang
-RUN wget https://go.dev/dl/go1.23.5.linux-${TARGETARCH}.tar.gz && \
-    tar -C /usr/local -xzf go1.23.5.linux-${TARGETARCH}.tar.gz && \
-    rm go1.23.5.linux-${TARGETARCH}.tar.gz
+COPY --from=builder /out/ /
 
-# Set Golang environment variables
-ENV PATH="/usr/local/go/bin:$PATH"
-ENV GOPATH=/root/go
-
-# Build amneziawg-go
-RUN git clone https://github.com/amnezia-vpn/amneziawg-go.git && \
-    cd amneziawg-go && \
-    make -j `nproc` && \
-    chmod +x amneziawg-go && \
-    mv amneziawg-go /usr/local/bin/amneziawg-go && \
-    cd .. && rm -rf amneziawg-go
-
-RUN git clone https://github.com/amnezia-vpn/amneziawg-tools && \
-    cd amneziawg-tools/src && \
-    make -j`nproc` && make install &&\
-    cd ../.. && rm -rf amneziawg-tools
-
-# Create directory for configs and scripts
 RUN mkdir -p /etc/amnezia/amneziawg
 WORKDIR /etc/amnezia
 
-# Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
+COPY awgcfg.py /usr/local/bin/awgcfg.py
+
 RUN chmod +x /entrypoint.sh
 
-# Copy awgcfg.py script
-COPY awgcfg.py /etc/amnezia/awgcfg.py
-
-# Run entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

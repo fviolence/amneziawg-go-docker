@@ -10,6 +10,8 @@ import random
 import datetime
 import qrcode
 
+from urllib.request import urlopen
+
 g_main_config_src = '.main.config'
 g_main_config_fn = None
 g_main_config_path = None
@@ -349,14 +351,9 @@ def get_main_iface():
     return None
 
 def get_ext_ipaddr():
-    rc, out = exec_cmd('curl -4 -s icanhazip.com')
-    if rc:
-        raise RuntimeError(f'ERROR: Cannot get ext IP-Addr')
-
-    lines = out.split('\n')
-    ipaddr = lines[-1] if lines[-1] else lines[-2]
-    ipaddr = IPAddr(ipaddr)
-    return str(ipaddr)
+    with urlopen("https://icanhazip.com", timeout=10) as resp:
+        ipaddr = resp.read().decode("utf-8").strip()
+    return str(IPAddr(ipaddr))
 
 def gen_pair_keys(cfg_type = None):
     global g_main_config_type

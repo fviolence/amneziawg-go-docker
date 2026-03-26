@@ -11,7 +11,9 @@ INTERFACE="${AMNEZIAWG_INTERFACE:-awg0}"
 # Trap SIGTERM (Docker stop) or SIGINT, then bring down awg0
 cleanup() {
   echo "Caught stop signal, bringing down $INTERFACE..."
-  awg-quick down $INTERFACE || true
+  awg-quick down "$INTERFACE" || true
+  pkill -f "^amneziawg-go ${INTERFACE}$" 2>/dev/null || true
+  ip link del dev "$INTERFACE" 2>/dev/null || true
   exit 0
 }
 trap cleanup SIGTERM SIGINT
@@ -20,15 +22,19 @@ trap cleanup SIGTERM SIGINT
 if [ ! -f "$CONFIG_FILE" ]; then
   echo "Using IP: $IP, Port: $PORT, Interface: $INTERFACE"
   echo "Generating AmneziaWG configuration with ip $IP and port $PORT..."
-  python3 /etc/amnezia/awgcfg.py --make $CONFIG_FILE -i $IP -p $PORT --tun $INTERFACE
+  python3 /usr/local/bin/awgcfg.py --make $CONFIG_FILE -i $IP -p $PORT --tun $INTERFACE
 else
   echo "Loading AmneziaWG configuration $CONFIG_FILE..."
-  python3 /etc/amnezia/awgcfg.py --ldconf $CONFIG_FILE
+  python3 /usr/local/bin/awgcfg.py --ldconf $CONFIG_FILE
 fi
 
-# Generate config template
-echo "Generating AmneziaWG configuration template..."
-python3 /etc/amnezia/awgcfg.py --create
+chmod 600 "$CONFIG_FILE" || true
+
+# Generate config template only if missing
+if [ ! -f /etc/amnezia/_defclient.config ]; then
+  echo "Generating AmneziaWG configuration template..."
+  python3 /usr/local/bin/awgcfg.py --create
+fi
 
 # Start the AmneziaWG interface
 echo "Starting AmneziaWG interface: $INTERFACE..."
